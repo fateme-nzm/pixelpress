@@ -415,3 +415,18 @@ With the requirement that you:
  ◆ Make source code available when distributing
 
 This project builds on [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm) (LGPL-2.1) which is built from [FFmpeg](https://ffmpeg.org/) (LGPL-2.1+).
+
+## Based On / Attribution
+
+**PixelPress** is a modified, personalized fork of [ffmpeg-webCLI](https://github.com/tejaswigowda/ffmpeg-webCLI) by Tejaswi Gowda, licensed under **GPL-3.0**.
+
+This project builds on ffmpeg-webCLI's structure (browser-based video processing via [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm), COOP/COEP local server setup) and adds custom features on top of it, including:
+
+- Video Analyzer (real ffprobe-derived stream/container metadata)
+- FFmpeg Command Generator (interactive command builder with Copy/Run)
+- Bitrate/Quality Calculator
+
+See `CHANGES.md` for a detailed log of modifications made to the original codebase, as required by the GPL-3.0 license.
+
+Original project: https://github.com/tejaswigowda/ffmpeg-webCLI (GPL-3.0)
+ffmpeg.wasm: https://github.com/ffmpegwasm/ffmpeg.wasm (LGPL-2.1)
