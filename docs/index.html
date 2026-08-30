@@ -436,6 +436,8 @@
             <button class="op-tile" id="op-boomerang"     onclick="setOp('boomerang')"><i class="fas fa-retweet"></i> Boomerang</button>
             <button class="op-tile" id="op-sharpenblur"   onclick="setOp('sharpenblur')"><i class="fas fa-eye"></i> Sharpen / Blur</button>
                         <button class="op-tile" id="op-raw"           onclick="setOp('raw')"><i class="fas fa-terminal"></i> Raw FFmpeg</button>
+            <button class="op-tile" id="op-cmdgen"        onclick="setOp('cmdgen')"><i class="fas fa-code"></i> Command Generator</button>
+            <button class="op-tile" id="op-bitratecalc"   onclick="setOp('bitratecalc')"><i class="fas fa-calculator"></i> Bitrate Calculator</button>
 
           </div>
 
@@ -875,13 +877,14 @@
             <p class="hint">Overlay video loops if shorter than the main clip. Audio from the main clip is preserved. Trim applies to the main clip.</p>
           </div>
 
-          <!-- Media Info -->
+          <!-- Media Info / Video Analyzer -->
           <div class="op-panel hidden" id="panel-info">
-            <h4>Media Info</h4>
+            <h4>Video Analyzer</h4>
             <div id="infoBasic" style="font-size:0.82rem;color:var(--text);line-height:1.9;margin-bottom:10px">
               <span style="color:var(--muted)">Load a video file to see its properties.</span>
             </div>
-            <p class="hint">Click <strong style="color:var(--text)">Process Video</strong> to run a deep scan and log full codec &amp; stream details below.</p>
+            <p class="hint">Basic fields above come straight from the <strong style="color:var(--text)">browser</strong> the instant a file is loaded. Click <strong style="color:var(--text)">Process Video</strong> to run a real ffprobe deep scan for the detailed fields below \u2014 nothing here is guessed or faked; anything the scan can't confirm is shown as "Not available".</p>
+            <div id="analyzerResults" class="hidden"></div>
           </div>
 
           <!-- Raw / Advanced -->
@@ -919,6 +922,119 @@
             <div class="cmd-preview" id="cmdPreview">--</div>
             <p class="hint" style="margin-top:6px">Args are split on whitespace. Wrap values containing spaces in double quotes, e.g. <code style="color:var(--accent)">-vf "scale=1280:-2,hflip"</code></p>
           </div>
+
+          <!-- FFmpeg Command Generator -->
+          <div class="op-panel hidden" id="panel-cmdgen">
+            <h4>FFmpeg Command Generator</h4>
+            <p class="hint" style="margin-top:0">Pick settings below to build a real, working FFmpeg command \u2014 no trim/chain applied, this always runs on the whole source file. Video codec is currently H.264 (libx264) only; more codecs (H.265, VP9) are planned for a later phase.</p>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="lbl">Video Codec</label>
+                <select id="cmdgenVcodec" onchange="updateCmdGenPreview()">
+                  <option value="libx264" selected>H.264 (libx264)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="lbl">Preset</label>
+                <select id="cmdgenPreset" onchange="updateCmdGenPreview()">
+                  <option value="ultrafast">ultrafast - fastest</option>
+                  <option value="fast">fast</option>
+                  <option value="medium" selected>medium - balanced</option>
+                  <option value="slow">slow - better compression</option>
+                  <option value="veryslow">veryslow - best compression</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="lbl">Quality (CRF)</label>
+                <input type="range" id="cmdgenCrf" min="0" max="51" value="23" step="1" oninput="document.getElementById('cmdgenCrfVal').textContent=this.value; updateCmdGenPreview()">
+                <div class="time-val"><span id="cmdgenCrfVal">23</span> <span style="color:var(--muted);font-size:.7rem">(0=lossless · 23=default · 51=worst)</span></div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="lbl">Width (px)</label>
+                <input type="number" id="cmdgenW" placeholder="auto (source size)" oninput="updateCmdGenPreview()">
+              </div>
+              <div class="form-group">
+                <label class="lbl">Height (px)</label>
+                <input type="number" id="cmdgenH" placeholder="auto (source size)" oninput="updateCmdGenPreview()">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="lbl">Audio Codec</label>
+                <select id="cmdgenAcodec" onchange="onCmdGenAcodecChange()">
+                  <option value="aac" selected>AAC</option>
+                  <option value="libmp3lame">MP3</option>
+                  <option value="copy">Copy (no re-encode)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="lbl">Audio Bitrate (kb/s)</label>
+                <input type="number" id="cmdgenAbitrate" value="192" placeholder="192" oninput="updateCmdGenPreview()">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="lbl">Output format</label>
+                <select id="cmdgenFmt" onchange="updateCmdGenPreview()">
+                  <option value="mp4" selected>MP4</option>
+                  <option value="mkv">MKV</option>
+                </select>
+              </div>
+            </div>
+            <label class="lbl" style="margin-top:10px;display:block">Full command preview</label>
+            <div class="cmd-preview" id="cmdgenPreview">--</div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn btn-ghost btn-sm" onclick="copyCmdGenCommand()"><i class="fas fa-copy"></i> Copy Command</button>
+              <button class="btn btn-primary btn-sm" id="cmdgenRunBtn" onclick="runCommandGenerator()"><i class="fas fa-play"></i> Run Command</button>
+            </div>
+            <p class="hint" style="margin-top:8px">Leave Width/Height blank to keep the source resolution. Setting only one of them preserves aspect ratio automatically (the other becomes <code style="color:var(--accent)">-1</code>).</p>
+          </div>
+
+          <!-- Bitrate / Quality Calculator -->
+          <div class="op-panel hidden" id="panel-bitratecalc">
+            <h4>Bitrate / Quality Calculator</h4>
+            <p class="hint" style="margin-top:0">A standalone calculator/visualizer \u2014 it doesn't touch the loaded video. Split a total bitrate budget equally across N channels/streams. Works without any file loaded.</p>
+
+            <div class="mode-toggle" role="tablist" aria-label="Budget unit">
+              <button class="mode-btn active" id="bcUnitKbps" onclick="setBcUnit('kbps')"><i class="fas fa-gauge-high"></i> kbps</button>
+              <button class="mode-btn" id="bcUnitMB" onclick="setBcUnit('mb')"><i class="fas fa-file"></i> Total size (MB)</button>
+            </div>
+
+            <div class="form-row" id="bcKbpsRow">
+              <div class="form-group">
+                <label class="lbl">Total Budget (kb/s)</label>
+                <input type="number" id="bcKbps" placeholder="e.g. 2000" min="0" oninput="updateBitrateCalc()">
+              </div>
+            </div>
+
+            <div class="form-row hidden" id="bcMbRow">
+              <div class="form-group">
+                <label class="lbl">Total Budget (MB)</label>
+                <input type="number" id="bcMB" placeholder="e.g. 50" min="0" oninput="updateBitrateCalc()">
+              </div>
+              <div class="form-group">
+                <label class="lbl">Duration (seconds)</label>
+                <input type="number" id="bcDuration" placeholder="e.g. 60" min="0" oninput="updateBitrateCalc()">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="lbl">Number of Channels</label>
+                <input type="number" id="bcChannels" value="2" min="1" step="1" oninput="updateBitrateCalc()">
+              </div>
+            </div>
+
+            <label class="lbl" style="margin-top:10px;display:block">Equal Allocation \u2014 per-channel share</label>
+            <div id="bcResults" style="font-size:0.85rem;line-height:1.9">--</div>
+
+            <p class="hint" style="margin-top:10px">v1 only does equal allocation across channels. Content-aware allocation (rate-distortion / complexity-weighted, as in the StatMux work) is a good candidate for a later phase, on top of this same input shape.</p>
+          </div>
+
 
           <!-- Pad / Letterbox -->
           <div class="op-panel hidden" id="panel-pad">
@@ -1183,7 +1299,7 @@ const CHAINABLE = new Set(['crop','resizecompress','rotate','adjust','fade','den
 const STACK_ICON = { crop:'fa-crop-simple', resizecompress:'fa-compress', rotate:'fa-rotate-right', adjust:'fa-sliders', fade:'fa-circle-half-stroke', denoise:'fa-broom', sharpenblur:'fa-eye', speed:'fa-bolt', pad:'fa-expand', volume:'fa-volume-high' };
 
 // Operations unsupported in batch mode (multi-input, memory-intensive buffering, whole-file special handling, or informational)
-const BATCH_UNSUPPORTED = new Set(['crop', 'concat', 'sxs', 'pip', 'mixaudio', 'overlay', 'subtitles', 'autocaption', 'reverse', 'boomerang', 'info', 'raw']);
+const BATCH_UNSUPPORTED = new Set(['crop', 'concat', 'sxs', 'pip', 'mixaudio', 'overlay', 'subtitles', 'autocaption', 'reverse', 'boomerang', 'info', 'raw', 'cmdgen', 'bitratecalc']);
 
 // ── Batch mode state ─────────────────────────────────
 let batchMode = false;
@@ -1227,7 +1343,222 @@ function onPipFileChange(input) {
   pipExt  = pipFile.name.split('.').pop().toLowerCase();
   document.getElementById('pipFileName').textContent = pipFile.name;
 }
+// ── Video Analyzer: capture + parse the raw `ffmpeg -i` deep-scan output ────
+// scanCapture buffers log lines while a deep scan is running, without
+// changing how those lines are shown in the regular log panel.
+const scanCapture = { active: false, lines: [] };
+
+// Parses the plain-text output of `ffmpeg -hide_banner -i <file>` (the same
+// text already shown in the log panel) into structured fields. Never invents
+// a value: any field this can't confidently find is left as null and shown
+// as "Not available" in the UI, exactly as the project spec requires.
+function parseFFprobeDeepScan(text) {
+  const lines = text.split('\n');
+  const result = {
+    container: { format: null, duration: null, bitrate: null },
+    video:     { codec: null, profile: null, resolution: null, fps: null, duration: null, bitrate: null, pixfmt: null, gop: null },
+    audio:     { codec: null, sampleRate: null, channels: null, channelLayout: null, bitrate: null },
+  };
+
+  // Capture the full demuxer name list (e.g. "mov,mp4,m4a,3gp,3g2,mj2"), not
+  // just the first token — ffmpeg lists every container family the demuxer
+  // matches, and trimming to one name (e.g. "mov") is misleading for an
+  // actual .mp4 file.
+  const inputMatch = text.match(/Input #0,\s*(.+?),\s*from\s+/);
+  if (inputMatch) result.container.format = inputMatch[1].trim();
+
+  const durMatch = text.match(/Duration:\s*(\d{2}:\d{2}:\d{2}\.\d+)(?:,\s*start:[^,]+)?(?:,\s*bitrate:\s*(\d+)\s*kb\/s)?/);
+  if (durMatch) {
+    result.container.duration = durMatch[1];
+    if (durMatch[2]) result.container.bitrate = durMatch[2] + ' kb/s';
+  }
+
+  const videoLine = lines.find(l => /Stream #\d+:\d+.*Video:/.test(l));
+  if (videoLine) {
+    const codecMatch = videoLine.match(/Video:\s*([a-zA-Z0-9_]+)/);
+    if (codecMatch) result.video.codec = codecMatch[1];
+
+    // Only look for the profile inside the part of the line AFTER "Video:" —
+    // otherwise the stream language tag (e.g. "(und)"), which sits in
+    // parentheses BEFORE "Video:", gets picked up as a false-positive profile.
+    const afterVideoLabel = videoLine.slice(videoLine.indexOf('Video:'));
+    const parens = [...afterVideoLabel.matchAll(/\(([^)]*)\)/g)].map(m => m[1]);
+    const profileCandidate = parens.find(p => !p.includes('/') && !/^0x/i.test(p));
+    if (profileCandidate) result.video.profile = profileCandidate;
+
+    const resMatch = videoLine.match(/(\d{2,5})x(\d{2,5})/);
+    if (resMatch) result.video.resolution = `${resMatch[1]}\u00d7${resMatch[2]}`;
+
+    const fpsMatch = videoLine.match(/([\d.]+)\s*fps/);
+    if (fpsMatch) result.video.fps = fpsMatch[1] + ' fps';
+
+    // A default `ffmpeg -i` text scan does not report a separate per-stream
+    // duration — only the container-level "Duration:" line. For a standard
+    // single-video-track file that value IS the video stream's duration, so
+    // we reuse it here rather than leaving a field blank that we could
+    // honestly fill; it is not a guess, it's the same real measurement.
+    result.video.duration = result.container.duration;
+
+    const vbrMatch = videoLine.match(/,\s*(\d+)\s*kb\/s/);
+    if (vbrMatch) result.video.bitrate = vbrMatch[1] + ' kb/s';
+
+    const pixMatch = videoLine.match(/\)\s*,\s*([a-z0-9]+)\(/) || videoLine.match(/,\s*([a-z0-9]+)\s*,\s*\d{2,5}x\d{2,5}/);
+    if (pixMatch) result.video.pixfmt = pixMatch[1];
+  }
+
+  const audioLine = lines.find(l => /Stream #\d+:\d+.*Audio:/.test(l));
+  if (audioLine) {
+    const codecMatch = audioLine.match(/Audio:\s*([a-zA-Z0-9_]+)/);
+    if (codecMatch) result.audio.codec = codecMatch[1];
+
+    const srMatch = audioLine.match(/(\d+)\s*Hz/);
+    if (srMatch) result.audio.sampleRate = srMatch[1] + ' Hz';
+
+    const chMatch = audioLine.match(/Hz,\s*([a-zA-Z0-9.\-]+)/);
+    if (chMatch) {
+      result.audio.channelLayout = chMatch[1];
+      if (/mono/i.test(chMatch[1])) result.audio.channels = '1';
+      else if (/stereo/i.test(chMatch[1])) result.audio.channels = '2';
+      else { const n = chMatch[1].match(/^(\d+)/); if (n) result.audio.channels = n[1]; }
+    }
+
+    const abrMatch = audioLine.match(/,\s*(\d+)\s*kb\/s/);
+    if (abrMatch) result.audio.bitrate = abrMatch[1] + ' kb/s';
+  }
+
+  // A standard `ffmpeg -i` scan does not reliably expose GOP structure —
+  // rather than guess, we mark it unavailable per the "never fake data" rule.
+  result.video.gop = null;
+
+  return result;
+}
+
+function fld(label, value, source) {
+  const v = (value === null || value === undefined || value === '') ? '<span style="color:var(--muted)">Not available</span>' : value;
+  return `<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--muted)">${label}</span><span>${v}</span></div>`;
+}
+
+// Formats a float seconds value (as ffprobe JSON reports it) into the same
+// "HH:MM:SS.ff" style already used elsewhere in this panel, so both data
+// sources (real ffprobe JSON and the ffmpeg -i text fallback) render consistently.
+function secondsToTimestamp(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined || isNaN(totalSeconds)) return null;
+  const s = Math.max(0, totalSeconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad2 = n => String(Math.floor(n)).padStart(2, '0');
+  const hundredths = Math.min(99, Math.round((sec - Math.floor(sec)) * 100));
+  return `${pad2(h)}:${pad2(m)}:${pad2(sec)}.${String(hundredths).padStart(2, '0')}`;
+}
+
+// Maps real `ffprobe -show_format -show_streams -print_format json` output
+// into the exact same { container, video, audio } shape parseFFprobeDeepScan
+// produces, so renderAnalyzerResults doesn't need to know which source it got.
+// This path gives exact, structured values (real profile string, per-stream
+// duration/bitrate) instead of regex-parsed text — used only when the
+// ffmpeg.wasm core build in the browser actually supports the ffprobe entry
+// point; see the try/catch around the call site.
+function parseFFprobeJSON(data) {
+  const result = {
+    container: { format: null, duration: null, bitrate: null },
+    video:     { codec: null, profile: null, resolution: null, fps: null, duration: null, bitrate: null, pixfmt: null, gop: null },
+    audio:     { codec: null, sampleRate: null, channels: null, channelLayout: null, bitrate: null },
+  };
+
+  const fmt = data.format || {};
+  if (fmt.format_name) result.container.format = fmt.format_name;
+  if (fmt.duration) result.container.duration = secondsToTimestamp(parseFloat(fmt.duration));
+  if (fmt.bit_rate) result.container.bitrate = Math.round(parseInt(fmt.bit_rate, 10) / 1000) + ' kb/s';
+
+  const streams = Array.isArray(data.streams) ? data.streams : [];
+
+  const vStream = streams.find(s => s.codec_type === 'video');
+  if (vStream) {
+    result.video.codec = vStream.codec_name || null;
+    result.video.profile = vStream.profile || null;
+    if (vStream.width && vStream.height) result.video.resolution = `${vStream.width}\u00d7${vStream.height}`;
+
+    // avg_frame_rate is more accurate for variable frame rate; r_frame_rate
+    // is the fallback (and avg_frame_rate can legitimately be "0/0" for some
+    // still-image or attached-pic streams).
+    const fr = (vStream.avg_frame_rate && vStream.avg_frame_rate !== '0/0') ? vStream.avg_frame_rate : vStream.r_frame_rate;
+    if (fr) {
+      const [num, den] = fr.split('/').map(Number);
+      if (den) result.video.fps = (Math.round((num / den) * 100) / 100) + ' fps';
+    }
+
+    const vDurRaw = vStream.duration ? parseFloat(vStream.duration) : (fmt.duration ? parseFloat(fmt.duration) : null);
+    result.video.duration = secondsToTimestamp(vDurRaw);
+
+    if (vStream.bit_rate) result.video.bitrate = Math.round(parseInt(vStream.bit_rate, 10) / 1000) + ' kb/s';
+    result.video.pixfmt = vStream.pix_fmt || null;
+
+    // Real GOP size/structure requires a per-frame pict_type scan
+    // (`-show_frames`), which is a much heavier operation than a single
+    // -show_streams/-show_format call and isn't attempted in v1. Left
+    // honestly "Not available" rather than guessed — a good candidate for a
+    // later phase given the StatMux background (I-frame spacing, GOP-aware
+    // bitrate allocation).
+    result.video.gop = null;
+  }
+
+  const aStream = streams.find(s => s.codec_type === 'audio');
+  if (aStream) {
+    result.audio.codec = aStream.codec_name || null;
+    if (aStream.sample_rate) result.audio.sampleRate = aStream.sample_rate + ' Hz';
+    if (aStream.channels) result.audio.channels = String(aStream.channels);
+    result.audio.channelLayout = aStream.channel_layout || null;
+    if (aStream.bit_rate) result.audio.bitrate = Math.round(parseInt(aStream.bit_rate, 10) / 1000) + ' kb/s';
+  }
+
+  return result;
+}
+
+function renderAnalyzerResults(parsed, sourceLabel) {
+  const el = document.getElementById('analyzerResults');
+  if (!el) return;
+  const srcText = sourceLabel || 'deep scan';
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase">Video <span style="font-weight:400;text-transform:none">(from ${srcText})</span></div>
+      <div style="font-size:0.82rem;line-height:1.9">
+        ${fld('Codec', parsed.video.codec)}
+        ${fld('Profile', parsed.video.profile)}
+        ${fld('Resolution', parsed.video.resolution)}
+        ${fld('FPS', parsed.video.fps)}
+        ${fld('Duration', parsed.video.duration)}
+        ${fld('Video Bitrate', parsed.video.bitrate)}
+        ${fld('Pixel Format', parsed.video.pixfmt)}
+        ${fld('GOP', parsed.video.gop)}
+      </div>
+    </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase">Audio <span style="font-weight:400;text-transform:none">(from ${srcText})</span></div>
+      <div style="font-size:0.82rem;line-height:1.9">
+        ${fld('Codec', parsed.audio.codec)}
+        ${fld('Sample Rate', parsed.audio.sampleRate)}
+        ${fld('Channels', parsed.audio.channels)}
+        ${fld('Channel Layout', parsed.audio.channelLayout)}
+        ${fld('Audio Bitrate', parsed.audio.bitrate)}
+      </div>
+    </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase">Container <span style="font-weight:400;text-transform:none">(from ${srcText})</span></div>
+      <div style="font-size:0.82rem;line-height:1.9">
+        ${fld('Format', parsed.container.format)}
+        ${fld('Duration', parsed.container.duration)}
+        ${fld('Overall Bitrate', parsed.container.bitrate)}
+        ${fld('File Size', inputFile ? fmtBytes(inputFile.size) : null)}
+      </div>
+    </div>
+  `;
+}
+
 function updateInfoPanel() {
+  const analyzerEl = document.getElementById('analyzerResults');
+  if (analyzerEl) { analyzerEl.classList.add('hidden'); analyzerEl.innerHTML = ''; }
   const el = document.getElementById('infoBasic');
   if (!el) return;
   if (!inputFile) {
@@ -1497,7 +1828,10 @@ async function loadFFmpeg() {
   txt.textContent = 'Downloading ffmpeg-core (~31 MB)…';
   btn.disabled = true;
 
-  ffmpeg.on('log', ({ message }) => addLog(message));
+  ffmpeg.on('log', ({ message }) => {
+    addLog(message);
+    if (scanCapture.active) scanCapture.lines.push(message);
+  });
   ffmpeg.on('progress', ({ progress }) => {
     const pct = Math.min(100, Math.round(progress * 100));
     document.getElementById('progFill').style.width = pct + '%';
@@ -1599,6 +1933,7 @@ async function handleFile(file) {
     document.getElementById('thumbTime').value = (vidDur / 2).toFixed(1);
     updateSizeEstimate();
     updateRawPreview();
+    updateCmdGenPreview();
   };
   document.getElementById('inputWrap').classList.remove('hidden');
   document.getElementById('dropZone').classList.add('hidden');
@@ -1882,6 +2217,8 @@ function setOp(op) {
   if (op === 'crop') renderCropFrame();
   updateSizeEstimate();
   updateRawPreview();
+  updateCmdGenPreview();
+  updateBitrateCalc();
   updateInfoPanel();
   refreshStackControls();
 }
@@ -1964,6 +2301,8 @@ function updateSizeEstimate() {
     case 'info':     { wrap.classList.add('hidden'); return; }
     case 'thumbnail':{ wrap.classList.add('hidden'); return; }
     case 'raw':       { wrap.classList.add('hidden'); return; }
+    case 'cmdgen':    { wrap.classList.add('hidden'); return; }
+    case 'bitratecalc': { wrap.classList.add('hidden'); return; }
     case 'pad':        { estimated = srcSize * (dur / vidDur); break; }
     case 'normalize':  { estimated = srcSize * (dur / vidDur); break; }
     case 'denoise':    { estimated = srcSize * (dur / vidDur); break; }
@@ -2080,6 +2419,176 @@ function updateRawPreview() {
   el.textContent = parts.join(' ');
 }
 
+// ── FFmpeg Command Generator ──────────────────────────
+// One shared builder feeds both the live preview AND the actual execution,
+// so the command shown on screen is guaranteed to be the command that runs
+// (never two copies of the same logic that could drift out of sync).
+function buildCmdGenArgs() {
+  const inN     = 'input.' + (inputExt || 'mp4');
+  const vcodec  = document.getElementById('cmdgenVcodec').value;
+  const preset  = document.getElementById('cmdgenPreset').value;
+  const crf     = document.getElementById('cmdgenCrf').value;
+  const w       = document.getElementById('cmdgenW').value.trim();
+  const h       = document.getElementById('cmdgenH').value.trim();
+  const acodec  = document.getElementById('cmdgenAcodec').value;
+  const abitrate= document.getElementById('cmdgenAbitrate').value.trim();
+  const outFmt  = document.getElementById('cmdgenFmt').value;
+  const outName = 'output.' + outFmt;
+
+  const argv = ['-i', inN, '-c:v', vcodec, '-preset', preset, '-crf', String(crf)];
+
+  // "0" is not a valid scale dimension (ffmpeg's scale filter rejects it) —
+  // treat it the same as an empty field rather than passing it through and
+  // producing a command that would fail to run.
+  const wNum = (w && Number(w) > 0) ? w : '';
+  const hNum = (h && Number(h) > 0) ? h : '';
+  if (wNum || hNum) {
+    argv.push('-vf', `scale=${wNum || '-1'}:${hNum || '-1'}`);
+  }
+
+  if (acodec === 'copy') {
+    argv.push('-c:a', 'copy');
+  } else {
+    argv.push('-c:a', acodec);
+    if (abitrate) argv.push('-b:a', abitrate + 'k');
+  }
+
+  argv.push(outName);
+  return { argv, outName, inN, cmd: 'ffmpeg ' + argv.join(' ') };
+}
+
+function onCmdGenAcodecChange() {
+  const isCopy = document.getElementById('cmdgenAcodec').value === 'copy';
+  document.getElementById('cmdgenAbitrate').disabled = isCopy;
+  updateCmdGenPreview();
+}
+
+function updateCmdGenPreview() {
+  if (currentOp !== 'cmdgen') return;
+  const el = document.getElementById('cmdgenPreview');
+  if (!el) return;
+  if (!inputFile) { el.textContent = '(load a file first)'; return; }
+  el.textContent = buildCmdGenArgs().cmd;
+}
+
+function copyCmdGenCommand() {
+  if (!inputFile) { addLog('Load a file first.', 'warn'); return; }
+  const { cmd } = buildCmdGenArgs();
+  navigator.clipboard.writeText(cmd).then(() => {
+    addLog('Command copied to clipboard.', 'ok');
+  }).catch(err => {
+    addLog('Could not copy to clipboard: ' + (err && err.message ? err.message : err), 'err');
+  });
+}
+
+// Runs independently of the main "Process Video" button, per spec — this
+// panel has its own dedicated Run button and its own execution path.
+async function runCommandGenerator() {
+  if (!inputFile) { addLog('Load a file first.', 'warn'); return; }
+
+  if (!isLoaded()) {
+    await loadFFmpeg();
+    if (!isLoaded()) return;
+  }
+
+  const runBtn = document.getElementById('cmdgenRunBtn');
+  runBtn.disabled = true;
+  runBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running…';
+
+  const pw = document.getElementById('progWrap');
+  pw.classList.remove('hidden');
+  document.getElementById('progFill').style.width = '0%';
+  document.getElementById('progPct').textContent  = '0%';
+
+  const { argv, outName, inN, cmd } = buildCmdGenArgs();
+
+  try {
+    await requestWakeLock();
+    addLog('Writing input file…', 'ok');
+    await ffmpeg.writeFile(inN, await fetchFile(inputFile));
+    addLog(cmd, 'ok');
+    const exitCode = await ffmpeg.exec(argv);
+    if (exitCode !== 0) throw new Error(`ffmpeg exited with code ${exitCode} — check your settings and try again.`);
+    addLog('Done!', 'ok');
+
+    const data = await ffmpeg.readFile(outName);
+    outExt = outName.split('.').pop().toLowerCase();
+    await renderOutput(data, outExt);
+
+    await ffmpeg.deleteFile(inN).catch(() => {});
+    await ffmpeg.deleteFile(outName).catch(() => {});
+  } catch (err) {
+    const errMsg = (err instanceof Error ? err.message : String(err)) || 'unknown error';
+    addLog('Error: ' + errMsg, 'err');
+    try { await ffmpeg.deleteFile(inN); } catch (_) {}
+    try { await ffmpeg.deleteFile(outName); } catch (_) {}
+  } finally {
+    runBtn.disabled = false;
+    runBtn.innerHTML = '<i class="fas fa-play"></i> Run Command';
+    pw.classList.add('hidden');
+    releaseWakeLock();
+  }
+}
+
+// ── Bitrate / Quality Calculator ──────────────────────
+// Pure client-side arithmetic — no ffmpeg/file involved. v1 is intentionally
+// just an equal-allocation calculator/visualizer, not a smart algorithm.
+let bcUnit = 'kbps';
+
+function setBcUnit(unit) {
+  bcUnit = unit;
+  document.getElementById('bcUnitKbps').classList.toggle('active', unit === 'kbps');
+  document.getElementById('bcUnitMB').classList.toggle('active', unit === 'mb');
+  document.getElementById('bcKbpsRow').classList.toggle('hidden', unit !== 'kbps');
+  document.getElementById('bcMbRow').classList.toggle('hidden', unit !== 'mb');
+  updateBitrateCalc();
+}
+
+function updateBitrateCalc() {
+  const el = document.getElementById('bcResults');
+  if (!el) return;
+
+  const channels = Math.max(1, parseInt(document.getElementById('bcChannels').value, 10) || 1);
+
+  let totalKbps = null;
+  if (bcUnit === 'kbps') {
+    const v = parseFloat(document.getElementById('bcKbps').value);
+    if (v > 0) totalKbps = v;
+  } else {
+    const mb  = parseFloat(document.getElementById('bcMB').value);
+    const dur = parseFloat(document.getElementById('bcDuration').value);
+    // Decimal MB (1 MB = 8,000,000 bits) and total duration in seconds.
+    if (mb > 0 && dur > 0) totalKbps = (mb * 8000) / dur;
+  }
+
+  if (totalKbps === null) {
+    el.textContent = bcUnit === 'kbps'
+      ? 'Enter a total budget in kb/s.'
+      : 'Enter both total size (MB) and duration (seconds).';
+    return;
+  }
+
+  const perChannel = totalKbps / channels;
+  const rows = [];
+  for (let i = 1; i <= channels; i++) {
+    const pct = 100 / channels;
+    rows.push(`
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="width:70px;color:var(--muted)">Ch ${i}</span>
+        <div style="flex:1;background:var(--surface2);border-radius:4px;overflow:hidden;height:16px">
+          <div style="width:${pct}%;height:100%;background:var(--accent)"></div>
+        </div>
+        <span style="width:110px;text-align:right">${perChannel.toFixed(1)} kb/s</span>
+      </div>
+    `);
+  }
+
+  el.innerHTML = `
+    <div style="margin-bottom:10px;color:var(--muted)">Total budget: ${totalKbps.toFixed(1)} kb/s across ${channels} channel${channels > 1 ? 's' : ''}</div>
+    ${rows.join('')}
+  `;
+}
+
 // ── Process (Single or Batch) ─────────────────────────
 async function processVideo() {
   if (batchMode) {
@@ -2091,6 +2600,13 @@ async function processVideo() {
 
 async function runProcess() {
   if (!inputFile) return;
+
+  // Command Generator and Bitrate Calculator have their own dedicated
+  // buttons and don't participate in the main Process Video pipeline.
+  if (currentOp === 'cmdgen' || currentOp === 'bitratecalc') {
+    addLog('This panel has its own button \u2014 use that instead of Process Video.', 'warn');
+    return;
+  }
 
   if (!isLoaded()) {
     await loadFFmpeg();
@@ -2679,11 +3195,47 @@ async function runProcess() {
         break;
       }
       case 'info': {
-        args.length = 0;
-        args.push('-hide_banner', '-i', inName);
-        addLog('ffmpeg ' + args.join(' '), 'ok');
-        await ffmpeg.exec(args); // exits with code 1 \u2014 expected
-        addLog('\u2500\u2500\u2500 Deep scan complete \u2014 see log above for full codec / stream details. \u2500\u2500\u2500', 'ok');
+        let parsed = null;
+        let sourceLabel = null;
+
+        // Attempt 1: real ffprobe (structured JSON). Gives exact values —
+        // real profile string, per-stream duration/bitrate — instead of
+        // regex-parsed text. Not every ffmpeg-core build compiles in the
+        // ffprobe entry point, so this is wrapped and allowed to fail.
+        try {
+          addLog('Running ffprobe (structured JSON scan)\u2026', 'ok');
+          await ffmpeg.ffprobe(['-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', inName, '-o', 'probe.json']);
+          const probeText = await ffmpeg.readFile('probe.json', 'utf8');
+          const probeJson = JSON.parse(probeText);
+          parsed = parseFFprobeJSON(probeJson);
+          sourceLabel = 'ffprobe JSON';
+          addLog('ffprobe succeeded \u2014 using structured JSON output.', 'ok');
+          try { await ffmpeg.deleteFile('probe.json'); } catch (_cleanupErr) { /* non-fatal */ }
+        } catch (probeErr) {
+          const msg = (probeErr && probeErr.message) ? probeErr.message : String(probeErr);
+          addLog('ffprobe not available in this build (' + msg + ') \u2014 falling back to ffmpeg -i text scan.', 'warn');
+        }
+
+        // Attempt 2 (fallback): the existing plain-text `ffmpeg -i` deep
+        // scan, only run if real ffprobe wasn't available above.
+        if (!parsed) {
+          args.length = 0;
+          args.push('-hide_banner', '-i', inName);
+          addLog('ffmpeg ' + args.join(' '), 'ok');
+          scanCapture.active = true;
+          scanCapture.lines = [];
+          await ffmpeg.exec(args); // exits with code 1 — expected
+          scanCapture.active = false;
+          addLog('───────── Deep scan complete — see log above for full codec / stream details. ─────────', 'ok');
+          try {
+            parsed = parseFFprobeDeepScan(scanCapture.lines.join('\n'));
+            sourceLabel = 'ffmpeg -i text scan';
+          } catch (err) {
+            addLog('Analyzer: could not parse deep-scan output — raw log above is still accurate. (' + err + ')', 'warn');
+          }
+        }
+
+        if (parsed) renderAnalyzerResults(parsed, sourceLabel);
         pw.classList.add('hidden');
         return; // finally block re-enables the button
       }
@@ -5089,7 +5641,9 @@ Object.assign(window, {
   setMode, addToStack, removeStackItem, moveStackItem, updateStackPreview, runProcessStack,
   toggleBatchMode, handleBatchFiles, clearBatchQueue, removeBatchFile, downloadBatchFile, downloadAllBatchFiles,
   downloadBatchAllAsZip, selectBatchOutput,
-  confirmAutoCaptionTranscript, clearAutoCaptionTranscript, updateAutoCaptionTranscript
+  confirmAutoCaptionTranscript, clearAutoCaptionTranscript, updateAutoCaptionTranscript,
+  updateCmdGenPreview, copyCmdGenCommand, runCommandGenerator, onCmdGenAcodecChange,
+  setBcUnit, updateBitrateCalc
 });
 
 /**
