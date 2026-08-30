@@ -430,3 +430,14 @@ See `CHANGES.md` for a detailed log of modifications made to the original codeba
 
 Original project: https://github.com/tejaswigowda/ffmpeg-webCLI (GPL-3.0)
 ffmpeg.wasm: https://github.com/ffmpegwasm/ffmpeg.wasm (LGPL-2.1)
+
+## Live Demo
+
+https://pixelpress.fatemenezamabady.workers.dev
+
+## Running Locally
+Then open http://127.0.0.1:5500 in Chrome (or another Chromium-based browser).
+
+## Deployment
+
+Deployed on Cloudflare Pages. Build output directory: `docs`, no build command needed (static site). COOP/COEP headers (required for FFmpeg's SharedArrayBuffer) are set via `docs/_headers`. A `docs/vercel.json` is also kept in the repo in case of a future move to Vercel, but is not used by the current Cloudflare deployment.
