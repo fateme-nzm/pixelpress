@@ -436,6 +436,13 @@ ffmpeg.wasm: https://github.com/ffmpegwasm/ffmpeg.wasm (LGPL-2.1)
 https://pixelpress.fatemenezamabady.workers.dev
 
 ## Running Locally
+
+```
+git clone https://github.com/fateme-nzm/pixelpress.git
+cd pixelpress
+node server.js
+```
+
 Then open http://127.0.0.1:5500 in Chrome (or another Chromium-based browser).
 
 ## Deployment
